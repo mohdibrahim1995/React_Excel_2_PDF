@@ -41,7 +41,7 @@ function App() {
       row.forEach((cell, cellIndex) => {
         const cellText = cell ? String(cell) : "";
 
-        // Draw cell border
+        // Draw cell border to make it work
         page.drawRectangle({
           x: xPosition + cellIndex * cellWidth,
           y: yPosition,
