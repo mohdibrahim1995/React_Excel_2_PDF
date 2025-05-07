@@ -1,11 +1,11 @@
-// import "./App.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { useState } from "react";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-
 import * as XLSX from "xlsx";
+
 function App() {
   const [excelData, setExcelData] = useState([]);
+  
   // Handle Excel file upload
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
@@ -22,46 +22,93 @@ function App() {
 
   // Convert Excel data to PDF with table-like structure and download
   const handleDownloadPdf = async () => {
+    // Calculate maximum columns in any row
+    const maxColumns = excelData.reduce((max, row) => 
+      Math.max(max, row.length), 0);
+    
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([600, 800]);
+    let page = pdfDoc.addPage([842, 595]); // A4 landscape
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const fontSize = 10;
+    const fontSize = 8; // Smaller font size for more content
 
     // Table positioning and dimensions
-    const cellPadding = 5;
+    const cellPadding = 3;
     const cellHeight = 20;
-    let xPosition = 50;
-    let yPosition = 750;
-    const tableWidth = 500;
+    let yPosition = 550;
+    
+    // Dynamic page width calculations
+    const pageWidth = page.getWidth();
+    const pageMargin = 40;
+    const tableWidth = pageWidth - (pageMargin * 2);
+    const xPosition = pageMargin;
+    
+    // Calculate cell widths based on content
+    let  columnWidths = new Array(maxColumns).fill(0);
+    
+    // First pass: determine optimal width for each column
+    excelData.forEach(row => {
+      row.forEach((cell, index) => {
+        const cellText = cell ? String(cell) : "";
+        // Approximate width based on text length (can be improved)
+        const textWidth = cellText.length * (fontSize * 0.6);
+        columnWidths[index] = Math.max(columnWidths[index], textWidth, 30); // Minimum width of 30
+      });
+    });
+    
+    // Scale column widths to fit table width if needed
+    const totalContentWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+    if (totalContentWidth > tableWidth) {
+      const scaleFactor = tableWidth / totalContentWidth;
+      columnWidths = columnWidths.map(width => width * scaleFactor);
+    }
 
+    // Draw the table with calculated column widths
     excelData.forEach((row, rowIndex) => {
-      const numCells = row.length;
-      const cellWidth = tableWidth / numCells;
-
+      // Check if we need a new page
+      if (yPosition < 50) {
+        page = pdfDoc.addPage([842, 595]);
+        yPosition = 550;
+      }
+      
+      let currentX = xPosition;
+      
+      // Draw each cell in the row
       row.forEach((cell, cellIndex) => {
         const cellText = cell ? String(cell) : "";
-
-        // Draw cell border to make it work
+        const cellWidth = columnWidths[cellIndex];
+        
+        // Draw cell border
         page.drawRectangle({
-          x: xPosition + cellIndex * cellWidth,
-          y: yPosition,
+          x: currentX,
+          y: yPosition - cellHeight,
           width: cellWidth,
           height: cellHeight,
           borderColor: rgb(0.75, 0.75, 0.75),
           borderWidth: 1,
         });
-
-        // Draw cell text, center-aligned within each cell
-        page.drawText(cellText, {
-          x: xPosition + cellIndex * cellWidth + cellPadding,
-          y: yPosition + cellPadding,
+        
+        // Calculate text positioning to prevent overflow
+        // Truncate text if too long for cell
+        let displayText = cellText;
+        const maxChars = Math.floor((cellWidth - (cellPadding * 2)) / (fontSize * 0.6));
+        if (displayText.length > maxChars) {
+          displayText = displayText.substring(0, maxChars - 3) + "...";
+        }
+        
+        // Draw cell text, properly positioned within cell
+        page.drawText(displayText, {
+          x: currentX + cellPadding,
+          y: yPosition - cellHeight + cellPadding,
           size: fontSize,
           font,
           color: rgb(0, 0, 0),
-          maxWidth: cellWidth - cellPadding * 2,
+          maxWidth: cellWidth - (cellPadding * 2),
         });
+        
+        // Move to the next cell position
+        currentX += cellWidth;
       });
-
+      
       // Move to the next row position
       yPosition -= cellHeight;
     });
@@ -76,21 +123,21 @@ function App() {
   };
 
   return (
-    <>
-      <div className="container mt-4">
-        <h1>Convert Excel to PDF</h1>
-        <input
-          type="file"
-          name="file"
-          accept=".xlsx, .xls"
-          required
-          onChange={handleFileUpload}
-          className="form-control mb-4"
-        />
+    <div className="container mt-4">
+      <h1>Convert Excel to PDF</h1>
+      <input
+        type="file"
+        name="file"
+        accept=".xlsx, .xls"
+        required
+        onChange={handleFileUpload}
+        className="form-control mb-4"
+      />
 
-        {excelData.length > 0 && (
-          <div>
-            <h2>Excel Preview</h2>
+      {excelData.length > 0 && (
+        <div>
+          <h2>Excel Preview</h2>
+          <div className="table-responsive">
             <table className="table table-bordered">
               <tbody>
                 {excelData.map((row, rowIndex) => (
@@ -102,16 +149,16 @@ function App() {
                 ))}
               </tbody>
             </table>
-            <button
-              onClick={handleDownloadPdf}
-              className="btn btn-primary mt-3"
-            >
-              Download as PDF
-            </button>
           </div>
-        )}
-      </div>
-    </>
+          <button
+            onClick={handleDownloadPdf}
+            className="btn btn-primary mt-3"
+          >
+            Download as PDF
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
